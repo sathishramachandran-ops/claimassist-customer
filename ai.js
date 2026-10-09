@@ -76,10 +76,11 @@ async function docs(c, only) {
   const seedN = [...(c.policy_no || "POL")].reduce((a, ch) => a + ch.charCodeAt(0), 0), y = new Date().getFullYear();
   const d = { ...c, eid: c.eid || `784-${rnd(1970, 1998)}-${rnd(1000000, 9999999)}-${rnd(1, 9)}`, nat: c.nat || pick(NAT), dob: c.dob || `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${rnd(1970, 1998)}`, eidExp: `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${y + 2}`, cardNo: String(rnd(100000000, 999999999)), licNo: String(rnd(1000000, 9999999)), tcNo: String(rnd(10000000, 99999999)), issue: `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${y - rnd(2, 8)}`, licExp: `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${y + rnd(1, 5)}`, regDate: `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${c.year || y - 3}`, regExp: `${pad(rnd(1, 28), 2)}-${pad(rnd(1, 12), 2)}-${y + 1}` };
   const F = { emirates_id: [], licence: [], registration: [], police_report: [], photo: [], other: [] };
-  if (want("emirates_id")) F.emirates_id = [await eidFront(d), await eidBack(d)];
-  if (want("licence")) F.licence = [await licence(d)];
-  if (want("registration")) F.registration = [await mulkiya(d)];
-  if (want("police_report") && ["Collision", "Side Impact"].includes(c.accident_type)) F.police_report = [policePdf({ ...d, police_no: c.police_no || `DXB-TAR-${y}-${rnd(100000, 999999)}` })];
+  const tag = (f, t) => { f.extracted = t; return f; };
+  if (want("emirates_id")) { const a = await eidFront(d), b = await eidBack(d); F.emirates_id = [tag(a, `EMIRATES ID - RESIDENT IDENTITY CARD. ID Number ${d.eid}. Name ${d.name}. Nationality ${d.nat}. Date of Birth ${d.dob}. Expiry ${d.eidExp}.`), tag(b, `EMIRATES ID (BACK). Card No ${d.cardNo}. Issuing place Dubai. Name ${d.name}. ID Number ${d.eid}.`)]; }
+  if (want("licence")) F.licence = [tag(await licence(d), `UAE DRIVING LICENCE. Licence No ${d.licNo}. Name ${d.name}. Date of Birth ${d.dob}. T.C. No ${d.tcNo}. Issue ${d.issue}. Expiry ${d.licExp}. Category Light Vehicle (1).`)];
+  if (want("registration")) F.registration = [tag(await mulkiya(d), `VEHICLE REGISTRATION CARD (MULKIYA). Plate DUBAI ${d.reg_no}. Owner ${d.name}. Make/Model ${d.make_model}. Year ${d.year}. Colour ${d.color}. Chassis No ${d.vin}. Registered ${d.regDate}. Expiry ${d.regExp}. Insurance Gulf Shield Insurance PJSC. Policy ${d.policy_no}.`)];
+  if (want("police_report") && ["Collision", "Side Impact"].includes(c.accident_type)) { const pn = c.police_no || `DXB-TAR-${y}-${rnd(100000, 999999)}`; F.police_report = [tag(policePdf({ ...d, police_no: pn }), `DUBAI POLICE TRAFFIC ACCIDENT REPORT. Report No ${pn}. Date of accident ${c.loss_date} ${c.loss_time || ""}. Location ${c.location}, ${c.emirate || "Dubai"}. Accident type ${c.accident_type}. Party A ${d.name}, ${d.make_model} ${d.color}, plate ${d.reg_no}, licence ${d.licNo}. Fault assessment: Party B at fault. Report filed on the same day as the accident.`)]; }
   if (want("photo")) F.photo = await photos(c, rnd(3, 4));
   void seedN; return F;
 }

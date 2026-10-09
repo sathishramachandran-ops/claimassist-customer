@@ -175,7 +175,7 @@ const go2 = h => { location.hash = h; };
 const safe = n => n.replace(/[^A-Za-z0-9._-]/g, "_").slice(-60);
 async function uploadAll(claimNo, l4, prog) {
   const jobs = Object.entries(FILES).flatMap(([k, a]) => a.map(f => ({ k, f }))), total = jobs.length || 1; let done = 0; const docs = [];
-  for (const { k, f } of jobs) { const path = `${claimNo}/${crypto.randomUUID()}-${safe(f.name)}`; prog(`Uploading ${f.name} (${done + 1} of ${jobs.length})…`, done / total); await upload(f, path, x => prog(`Uploading ${f.name} (${done + 1} of ${jobs.length})…`, (done + x) / total)); docs.push({ doc_type: k, file_name: f.name, mime: f.type, path }); done++; }
+  for (const { k, f } of jobs) { const path = `${claimNo}/${crypto.randomUUID()}-${safe(f.name)}`; prog(`Uploading ${f.name} (${done + 1} of ${jobs.length})…`, done / total); await upload(f, path, x => prog(`Uploading ${f.name} (${done + 1} of ${jobs.length})…`, (done + x) / total)); docs.push({ doc_type: k, file_name: f.name, mime: f.type, path, extracted: f.extracted || null }); done++; }
   prog("Finalising…", 0.98); const r = await rpc("uw_cust_register_docs", { p_claim_no: claimNo, p_last4: l4, p_docs: docs }); if (r.error) throw new Error(r.error);
   FILES = { emirates_id: [], licence: [], registration: [], police_report: [], photo: [], other: [] }; return r;
 }
