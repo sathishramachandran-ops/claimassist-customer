@@ -19,6 +19,16 @@ const STATUS = { "New": ["📥", "Received", "We have received your claim and an
 let S = JSON.parse(sessionStorage.getItem("ca_state") || "null") || { step: 1, policy: null, f: { driver: "self", claim_type: "Own Damage", accident_type: "Collision", areas: [], injuries: "no", emirate: "Dubai" } };
 let FILES = { emirates_id: [], licence: [], registration: [], police_report: [], photo: [], other: [] };
 const save = () => sessionStorage.setItem("ca_state", JSON.stringify(S));
+const AIB = `<button class="btn ai" id="ai" type="button">✨ AI generate</button>`;
+const head = (t, s) => `<div class="aih"><div><h2>${t}</h2><p class="sub">${s}</p></div>${AIB}</div>`;
+const busy = async (btn, fn) => { const t = btn.innerHTML; btn.disabled = true; btn.innerHTML = "✨ Generating…"; try { await fn(); } catch (e) { toast(e.message || "Generation failed"); } btn.disabled = false; btn.innerHTML = t; };
+const dctx = () => { const f = S.f, p = S.policy || {}; return { name: f.insured_name, make_model: f.make_model, year: f.vehicle_year, reg_no: f.reg_no, vin: f.vin, color: f.color, policy_no: p.policy_no, sample_claim_no: S.sample, accident_type: f.accident_type, location: f.location, emirate: f.emirate, loss_date: f.loss_date, loss_time: f.loss_time, description: f.description, police_no: f.police_report_no }; };
+async function simulateAll() {
+  const p = await AIGen.randomPolicy(), r = await rpc("uw_cust_lookup_policy", { p_policy: p.policy_no, p_last4: p.last4 }); if (!r.found) throw new Error("Demo policy lookup failed");
+  S.policy = r; S.polIn = p.policy_no; S.l4 = p.last4; S.sample = p.sample_claim_no;
+  S.f = { driver: "self", areas: [], injuries: "no", emirate: "Dubai", insured_name: r.insured_name, insured_phone: r.insured_phone, insured_email: r.insured_email, make_model: r.make_model, vehicle_year: r.vehicle_year, reg_no: r.reg_no, vin: r.vin, color: r.color };
+  Object.assign(S.f, AIGen.contact(S.f), AIGen.incident(S.f, r)); FILES = await AIGen.docs(dctx(), null); S.step = 5; save();
+}
 const needsPolice = () => ["Collision", "Side Impact"].includes(S.f.accident_type);
 
 // ---------- layout ----------
@@ -37,10 +47,11 @@ window.addEventListener("hashchange", route);
 
 // ---------- home ----------
 function home() {
-  shell("home", `<div class="hero"><h1>File your motor claim in minutes - and track it every step</h1><p>Tell us what happened, upload your documents and photos, and we'll take it from there. AI-assisted review means faster decisions.</p><div class="acts"><a class="btn lg" style="background:#fff;color:#14213d" href="#/new">Submit a new claim</a><a class="btn ghost lg" href="#/track">Track my claim</a></div></div>
+  shell("home", `<div class="hero"><h1>File your motor claim in minutes - and track it every step</h1><p>Tell us what happened, upload your documents and photos, and we'll take it from there. AI-assisted review means faster decisions.</p><div class="acts"><a class="btn lg" style="background:#fff;color:#14213d" href="#/new">Submit a new claim</a><a class="btn ghost lg" href="#/track">Track my claim</a><button class="btn ai lg" id="homeai" type="button">✨ Simulate a claim with AI</button></div></div>
   <div class="g3"><div class="card step-c"><div class="n">1</div><div><h3>Verify your policy</h3><p style="color:var(--mut);margin:4px 0 0">Policy number and the last 4 digits of your registered mobile.</p></div></div><div class="card step-c"><div class="n">2</div><div><h3>Tell us what happened</h3><p style="color:var(--mut);margin:4px 0 0">Date, place, damaged areas and a short description.</p></div></div><div class="card step-c"><div class="n">3</div><div><h3>Upload documents</h3><p style="color:var(--mut);margin:4px 0 0">Emirates ID, licence, Mulkiya, police report and photos.</p></div></div></div>
   <div class="g2" style="margin-top:16px"><div class="card"><h3>What you'll need</h3><ul class="need"><li>Policy number and registered mobile number</li><li>Emirates ID (front and back) and driving licence</li><li>Vehicle registration card (Mulkiya)</li><li>Dubai Police traffic accident report - for collisions</li><li>At least 3 clear photos of the damage</li></ul></div>
-  <div class="card"><h3>Good to know</h3><ul class="need"><li>Takes about 5 minutes</li><li>JPG, PNG, WEBP or PDF up to ${MAXMB} MB per file</li><li>You get a claim number straight away</li><li>Track status and add documents any time</li></ul><div class="demo"><b>Try the demo:</b> policy <b>${DEMO.policy}</b>, mobile last 4 digits <b>${DEMO.last4}</b>.</div></div></div>`);
+  <div class="card"><h3>Good to know</h3><ul class="need"><li>Takes about 5 minutes</li><li>JPG, PNG, WEBP or PDF up to ${MAXMB} MB per file</li><li>You get a claim number straight away</li><li>Track status and add documents any time</li></ul><div class="demo"><b>Try the demo:</b> policy <b>${DEMO.policy}</b>, mobile last 4 digits <b>${DEMO.last4}</b>, or use <b>✨ AI generate</b> on any step.</div></div></div>`);
+  document.getElementById("homeai").onclick = e => busy(e.currentTarget, async () => { await simulateAll(); if (location.hash !== "#/new") location.hash = "#/new"; else route(); toast("AI generated a complete new claim - review and submit"); });
 }
 
 // ---------- wizard ----------
@@ -57,11 +68,12 @@ const val = id => document.getElementById(id)?.value?.trim() ?? "";
 const setErr = (id, m) => { const e = document.getElementById("e_" + id); if (e) e.textContent = m || ""; return !m; };
 
 function step1(b) {
-  b.innerHTML = `<h2>Verify your policy</h2><p class="sub">We'll use this to fill in your vehicle and policy details.</p>
+  b.innerHTML = `${head("Verify your policy", "We'll use this to fill in your vehicle and policy details.")}
   <div class="row2"><div class="fld"><label class="l">Policy number <span class="req">*</span></label><input id="pol" placeholder="POL-45876" value="${esc(S.polIn || "")}"><div class="err" id="e_pol"></div></div>
   <div class="fld"><label class="l">Last 4 digits of registered mobile <span class="req">*</span></label><input id="l4" maxlength="4" inputmode="numeric" placeholder="1234" value="${esc(S.l4 || "")}"><div class="err" id="e_l4"></div></div></div>
   <button class="btn" id="verify">Verify policy</button> <button class="btn ghost sm" id="demo" style="margin-left:8px">Use demo policy</button>
   <div id="polcard">${S.policy ? polCard(S.policy) : ""}</div>${S.policy ? bar(false) : ""}`;
+  b.querySelector("#ai").onclick = e => busy(e.currentTarget, async () => { const p = await AIGen.randomPolicy(); S.sample = p.sample_claim_no; b.querySelector("#pol").value = p.policy_no; b.querySelector("#l4").value = p.last4; b.querySelector("#verify").click(); });
   b.querySelector("#demo").onclick = () => { b.querySelector("#pol").value = DEMO.policy; b.querySelector("#l4").value = DEMO.last4; };
   b.querySelector("#verify").onclick = async () => {
     const p = val("pol").toUpperCase(), l = val("l4"); setErr("pol", /^POL-\d{4,6}$/.test(p) ? "" : "Enter a policy number like POL-45876"); if (!/^POL-\d{4,6}$/.test(p)) return; if (!setErr("l4", /^\d{4}$/.test(l) ? "" : "Enter exactly 4 digits")) return;
@@ -76,7 +88,7 @@ const polCard = p => `<div class="pol"><b>✓ Policy verified</b><dl style="marg
 
 function step2(b) {
   const f = S.f;
-  b.innerHTML = `<h2>Your details</h2><p class="sub">Check these are correct - we'll contact you here.</p>
+  b.innerHTML = `${head("Your details", "Check these are correct - we'll contact you here.")}
   <div class="row2"><div class="fld"><label class="l">Full name <span class="req">*</span></label><input id="insured_name" value="${esc(f.insured_name)}"><div class="err" id="e_insured_name"></div></div><div class="fld"><label class="l">Mobile number <span class="req">*</span></label><input id="insured_phone" value="${esc(f.insured_phone)}"><div class="err" id="e_insured_phone"></div></div></div>
   <div class="fld"><label class="l">Email <span class="req">*</span></label><input id="insured_email" type="email" value="${esc(f.insured_email)}" placeholder="you@example.com"><div class="err" id="e_insured_email"></div></div>
   <div class="fld"><label class="l">Who was driving?</label><div class="rcs" style="grid-template-columns:1fr 1fr"><label class="rc"><input type="radio" name="driver" value="self" ${f.driver !== "other" ? "checked" : ""}><b>I was driving</b></label><label class="rc"><input type="radio" name="driver" value="other" ${f.driver === "other" ? "checked" : ""}><b>Someone else</b></label></div></div>
@@ -84,6 +96,7 @@ function step2(b) {
   <h3 style="margin:18px 0 10px">Vehicle <small style="color:var(--mut);font-weight:400">(from your policy - edit if needed)</small></h3>
   <div class="row2"><div class="fld"><label class="l">Make & model</label><input id="make_model" value="${esc(f.make_model)}"></div><div class="fld"><label class="l">Year</label><input id="vehicle_year" inputmode="numeric" value="${esc(f.vehicle_year)}"></div></div>
   <div class="row3"><div class="fld"><label class="l">Plate number</label><input id="reg_no" value="${esc(f.reg_no)}"></div><div class="fld"><label class="l">VIN / chassis</label><input id="vin" value="${esc(f.vin)}"></div><div class="fld"><label class="l">Colour</label><input id="color" value="${esc(f.color)}"></div></div>${bar(true)}`;
+  b.querySelector("#ai").onclick = e => busy(e.currentTarget, async () => { await AIGen.sleep(700); Object.assign(S.f, AIGen.contact(S.f)); save(); step2(b); });
   b.querySelectorAll('input[name="driver"]').forEach(r => r.onchange = () => { b.querySelector("#drv").style.display = r.value === "other" ? "block" : "none"; });
   const grab = () => { ["insured_name", "insured_phone", "insured_email", "driver_name", "make_model", "vehicle_year", "reg_no", "vin", "color"].forEach(k => { const e = b.querySelector("#" + k); if (e) f[k] = e.value.trim(); }); f.driver = b.querySelector('input[name="driver"]:checked').value; save(); };
   b.querySelector("#back").onclick = () => { grab(); go(1); };
@@ -95,7 +108,7 @@ const CAR = `<svg viewBox="0 0 200 330"><rect x="40" y="28" width="120" height="
 <text x="100" y="62" text-anchor="middle">FRONT</text><text x="100" y="286" text-anchor="middle">REAR</text><text x="37" y="180" text-anchor="middle" transform="rotate(-90 37 180)">DRIVER SIDE</text><text x="163" y="180" text-anchor="middle" transform="rotate(90 163 180)">PASSENGER SIDE</text><text x="100" y="180" text-anchor="middle">ROOF</text></svg>`;
 function step3(b) {
   const f = S.f, today = new Date().toISOString().slice(0, 10), p = S.policy;
-  b.innerHTML = `<h2>What happened?</h2><p class="sub">Give us as much detail as you can.</p>
+  b.innerHTML = `${head("What happened?", "Give us as much detail as you can.")}
   <div class="fld"><label class="l">Type of claim</label><div class="rcs" style="grid-template-columns:1fr 1fr">${[["Own Damage", "Own damage", "Damage to your own vehicle"], ["Third Party Liability", "Third-party liability", "Damage or injury to someone else"]].map(([v, t, d]) => `<label class="rc"><input type="radio" name="claim_type" value="${v}" ${f.claim_type === v ? "checked" : ""}><b>${t}</b><small>${d}</small></label>`).join("")}</div></div>
   <div class="fld"><label class="l">What kind of incident?</label><div class="chips">${["Collision", "Side Impact", "Parking Damage", "Hail Damage", "Vandalism", "Fire", "Theft"].map(v => `<label class="chip"><input type="radio" name="accident_type" value="${v}" ${f.accident_type === v ? "checked" : ""}>${v}</label>`).join("")}</div></div>
   <div class="fld"><label class="l">Where is your vehicle damaged? <small style="display:inline">(tap all that apply)</small></label><div class="car">${CAR}</div><div class="err" id="e_areas"></div></div>
@@ -107,6 +120,7 @@ function step3(b) {
   <div class="row2"><div class="fld"><label class="l">Was anyone injured?</label><div class="chips">${[["no", "No"], ["yes", "Yes"]].map(([v, t]) => `<label class="chip"><input type="radio" name="injuries" value="${v}" ${f.injuries === v ? "checked" : ""}>${t}</label>`).join("")}</div></div>
   <div class="fld"><label class="l">Your estimate of repair cost <small style="display:inline">(optional, AED)</small></label><input id="claimed_amount" inputmode="numeric" placeholder="e.g. 6500" value="${esc(f.claimed_amount || "")}"></div></div>
   <div class="fld"><label class="l">Preferred garage <small style="display:inline">(optional)</small></label><select id="garage_name"><option value="">No preference</option>${["Desert Star Auto Repairs LLC", "Gulf Precision Auto Care LLC", "Marina Collision Works LLC", "Al Quoz Premier Garage LLC"].map(g => `<option ${f.garage_name === g ? "selected" : ""}>${g}</option>`).join("")}</select></div>${bar(true)}`;
+  b.querySelector("#ai").onclick = e => busy(e.currentTarget, async () => { await AIGen.sleep(900); Object.assign(S.f, AIGen.incident(S.f, S.policy)); save(); step3(b); });
   const paint = () => b.querySelectorAll(".car .z").forEach(z => z.classList.toggle("on", f.areas.includes(z.dataset.z)));
   b.querySelectorAll(".car .z").forEach(z => z.onclick = () => { const k = z.dataset.z; f.areas = f.areas.includes(k) ? f.areas.filter(x => x !== k) : [...f.areas, k]; paint(); });
   paint();
@@ -130,17 +144,19 @@ function docsUI(b, onChange) {
   draw();
 }
 function step4(b) {
-  b.innerHTML = `<h2>Upload your documents</h2><p class="sub">Clear photos or scans help us decide faster. JPG, PNG, WEBP or PDF, up to ${MAXMB} MB each.</p><div id="docs"></div>${bar(true, true, "Review claim")}`;
-  docsUI(b); b.querySelector("#back").onclick = () => go(3);
+  b.innerHTML = `${head("Upload your documents", `Clear photos or scans help us decide faster. JPG, PNG, WEBP or PDF, up to ${MAXMB} MB each.`)}<div id="docs"></div>${bar(true, true, "Review claim")}`;
+  docsUI(b); b.querySelector("#ai").onclick = e => busy(e.currentTarget, async () => { FILES = await AIGen.docs(dctx(), null); step4(b); toast("AI generated the required documents and photos"); });
+  b.querySelector("#back").onclick = () => go(3);
   b.querySelector("#next").onclick = () => { const miss = DOCS().filter(([k, , req]) => req && (k === "photo" ? FILES[k].length < 3 : !FILES[k].length)).map(d => d[1]); if (miss.length && !confirm(`Still missing: ${miss.join(", ")}.\n\nYou can submit now and add them later from "Track a claim", but your claim won't be reviewed until they are provided. Continue?`)) return; go(5); };
 }
 
 function step5(b) {
   const f = S.f, p = S.policy, cnt = k => FILES[k].length;
-  b.innerHTML = `<h2>Review & submit</h2><p class="sub">Check everything, then submit.</p><div class="sum"><dl><dt>Policy</dt><dd>${esc(p.policy_no)}</dd><dt>Policyholder</dt><dd>${esc(f.insured_name)}</dd><dt>Contact</dt><dd>${esc(f.insured_phone)} · ${esc(f.insured_email)}</dd><dt>Driver</dt><dd>${f.driver === "other" ? esc(f.driver_name) : "Policyholder"}</dd><dt>Vehicle</dt><dd>${esc(f.color)} ${esc(f.make_model)} ${esc(f.vehicle_year)} · ${esc(f.reg_no)}</dd></dl>
+  b.innerHTML = `${head("Review & submit", "Check everything, then submit.")}<div class="sum"><dl><dt>Policy</dt><dd>${esc(p.policy_no)}</dd><dt>Policyholder</dt><dd>${esc(f.insured_name)}</dd><dt>Contact</dt><dd>${esc(f.insured_phone)} · ${esc(f.insured_email)}</dd><dt>Driver</dt><dd>${f.driver === "other" ? esc(f.driver_name) : "Policyholder"}</dd><dt>Vehicle</dt><dd>${esc(f.color)} ${esc(f.make_model)} ${esc(f.vehicle_year)} · ${esc(f.reg_no)}</dd></dl>
   <h4>Incident</h4><dl><dt>Claim type</dt><dd>${esc(f.claim_type)} · ${esc(f.accident_type)}</dd><dt>Date & time</dt><dd>${fdate(f.loss_date)} ${esc(f.loss_time || "")}</dd><dt>Location</dt><dd>${esc(f.location)}, ${esc(f.emirate)}</dd><dt>Damaged areas</dt><dd>${f.areas.length ? f.areas.map(a => ({ left: "driver side", right: "passenger side" }[a] || a)).join(", ") : "—"}</dd><dt>Description</dt><dd style="font-weight:400">${esc(f.description)}</dd><dt>Police report no.</dt><dd>${esc(f.police_report_no || "—")}</dd><dt>Injuries</dt><dd>${f.injuries === "yes" ? "Yes" : "No"}</dd><dt>Estimate</dt><dd>${f.claimed_amount ? aed(f.claimed_amount) : "—"}</dd></dl>
   <h4>Documents</h4><dl><dt>Emirates ID</dt><dd>${cnt("emirates_id")} file(s)</dd><dt>Driving licence</dt><dd>${cnt("licence")} file(s)</dd><dt>Mulkiya</dt><dd>${cnt("registration")} file(s)</dd><dt>Police report</dt><dd>${cnt("police_report")} file(s)</dd><dt>Damage photos</dt><dd>${cnt("photo")} photo(s)</dd><dt>Other</dt><dd>${cnt("other")} file(s)</dd></dl></div>
   <label class="rc" style="margin-top:18px;display:block"><input type="checkbox" id="decl"><b>I declare the information and documents are true and complete.</b><small>Providing false information may invalidate the claim.</small></label><div class="err" id="e_decl"></div><div id="progress"></div>${bar(true, true, "Submit claim")}`;
+  b.querySelector("#ai").onclick = e => busy(e.currentTarget, async () => { await simulateAll(); wizard(); toast("AI generated a complete new claim - review and submit"); });
   b.querySelector("#back").onclick = () => go(4);
   b.querySelector("#next").onclick = async () => {
     if (!setErr("decl", b.querySelector("#decl").checked ? "" : "Please confirm the declaration")) return;
@@ -192,8 +208,11 @@ function showTrack(res, t, c, l) {
   <div class="g2"><div class="card"><h3 style="margin-bottom:10px">Claim summary</h3><div class="sum"><dl><dt>Claim number</dt><dd>${esc(cl.claim_no)}</dd><dt>Policy</dt><dd>${esc(cl.policy_no)}</dd><dt>Vehicle</dt><dd>${esc(cl.vehicle)}</dd><dt>Incident</dt><dd>${esc(cl.accident_type)} · ${fdate(cl.loss_date)}</dd><dt>Location</dt><dd>${esc(cl.location)}</dd><dt>Submitted</dt><dd>${fdt(cl.reported_on)}</dd>${t.payment ? `<dt>Payment</dt><dd style="color:var(--green)">${aed(t.payment.amount)} on ${fdate(t.payment.paid_on)} (${esc(t.payment.txn_ref)})</dd>` : ""}</dl></div></div>
   <div class="card"><h3 style="margin-bottom:12px">Progress</h3><div class="tl">${t.timeline.map(x => `<div class="tli ${x.state}"><div class="pt">${x.state === "done" ? "✓" : x.state === "skipped" ? "–" : x.state === "current" ? "●" : ""}</div><div><b>${esc(x.title)}</b><small>${x.occurred_at ? fdt(x.occurred_at) : x.state === "current" ? "In progress" : "Pending"}</small></div></div>`).join("")}</div></div></div>
   <div class="card" style="margin-top:16px"><h3 style="margin-bottom:8px">Your documents</h3><table><thead><tr><th>Document</th><th>File</th><th>Uploaded</th></tr></thead><tbody>${t.documents.map(d => `<tr><td><b>${esc(d.title)}</b></td><td>${esc(d.file_name)}</td><td>${fdt(d.uploaded_on)}</td></tr>`).join("") || `<tr><td colspan="3" style="color:var(--mut)">No documents yet</td></tr>`}</tbody></table></div>
-  ${canAdd ? `<div class="card" style="margin-top:16px"><h3>Add more documents</h3><p class="sub" style="color:var(--mut);margin:4px 0 12px">Upload anything we asked for, or extra evidence.</p><div id="docs"></div><div class="bar"><span></span><button class="btn" id="addgo">Upload documents</button></div><div id="progress"></div></div>` : ""}`;
-  if (canAdd) { docsUI(res); res.querySelector("#addgo").onclick = async () => { const n = Object.values(FILES).flat().length; if (!n) return toast("Choose at least one file first"); const btn = res.querySelector("#addgo"), pr = res.querySelector("#progress"); btn.disabled = true; pr.innerHTML = `<div class="upl"><small id="pt"></small><div class="t"><i id="pb"></i></div></div>`;
+  ${canAdd ? `<div class="card" style="margin-top:16px"><div class="aih"><div><h3>Add more documents</h3><p class="sub" style="color:var(--mut);margin:4px 0 12px">Upload anything we asked for, or extra evidence.</p></div><button class="btn ai sm" id="aiMiss" type="button">✨ AI generate missing documents</button></div><div id="docs"></div><div class="bar"><span></span><button class="btn" id="addgo">Upload documents</button></div><div id="progress"></div></div>` : ""}`;
+  if (canAdd) { docsUI(res);
+    res.querySelector("#aiMiss").onclick = e => busy(e.currentTarget, async () => { const m = t.missing.join(" | "), keys = [/Emirates/.test(m) && "emirates_id", /licence/i.test(m) && "licence", /registration|Mulkiya/i.test(m) && "registration", /Police/.test(m) && "police_report", /photo/i.test(m) && "photo"].filter(Boolean); if (!keys.length) { toast("Nothing is missing - all required documents are in"); return; }
+      const reg = (cl.vehicle.match(/\(([^)]+)\)/) || [])[1] || "", sample = await AIGen.sample(cl.policy_no); FILES = await AIGen.docs({ name: cl.insured_name, make_model: cl.vehicle.replace(/\s*\(.*$/, ""), reg_no: reg, policy_no: cl.policy_no, sample_claim_no: sample, accident_type: cl.accident_type, location: cl.location, loss_date: cl.loss_date }, keys); docsUI(res); toast("AI generated the missing documents - press Upload documents"); });
+    res.querySelector("#addgo").onclick = async () => { const n = Object.values(FILES).flat().length; if (!n) return toast("Choose at least one file first"); const btn = res.querySelector("#addgo"), pr = res.querySelector("#progress"); btn.disabled = true; pr.innerHTML = `<div class="upl"><small id="pt"></small><div class="t"><i id="pb"></i></div></div>`;
       try { await uploadAll(c, l, (tx, p2) => { res.querySelector("#pt").textContent = tx; res.querySelector("#pb").style.width = p2 * 100 + "%"; }); toast("Documents uploaded"); const t2 = await rpc("uw_cust_track", { p_claim_no: c, p_last4: l }); showTrack(res, t2, c, l); } catch (e) { toast(e.message); btn.disabled = false; } }; }
 }
 route();

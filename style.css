@@ -32,3 +32,6 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mut);fo
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--navy);color:#fff;padding:12px 20px;border-radius:10px;opacity:0;transition:.25s;z-index:99;max-width:90vw}.toast.show{opacity:1;transform:translateX(-50%)}
 footer{max-width:1080px;margin:0 auto;padding:10px 20px 40px;color:var(--mut);font-size:12.5px;text-align:center}
 @media(max-width:800px){.g3,.g2,.row2,.row3{grid-template-columns:1fr}.hero{padding:30px 22px}.hero h1{font-size:28px}.nav a{padding:7px 9px}.help{display:none}.pol dl,.sum dl{grid-template-columns:110px 1fr}.prog div{font-size:10px}}
+
+.aih{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.btn.ai{background:linear-gradient(135deg,#7c3aed,#2563eb);box-shadow:0 4px 14px #7c3aed44;white-space:nowrap}.btn.ai:hover{filter:brightness(1.1);background:linear-gradient(135deg,#7c3aed,#2563eb)}.hero .btn.ai{border:0;color:#fff}
+@media(max-width:600px){.aih{flex-direction:column}}
